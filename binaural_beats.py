@@ -20,7 +20,8 @@ PRESETS = {
 
 
 def generate(carrier, beat, duration, sr, amplitude, fade,
-             f_hi=None, hi_mode="binaural", mod_depth=0.5, hi_carrier=400):
+             f_hi=None, hi_mode="binaural", mod_depth=0.5, hi_carrier=400,
+             hi_mix=0.5):
     n = int(sr * duration)
     fade_n = min(int(fade * sr), n // 2)
     is_cfc = f_hi is not None and f_hi > 0
@@ -32,9 +33,9 @@ def generate(carrier, beat, duration, sr, amplitude, fade,
         fade_out = 0.5 * (1.0 + np.cos(np.linspace(0, np.pi, fade_n)))
 
     if is_cfc:
-        norm = 2.0 / (2.0 + mod_depth)
-        lo_gain = 0.5 * amplitude * norm
-        hi_gain = 0.5 * amplitude * norm
+        norm = 1.0 / ((1.0 - hi_mix) + hi_mix * (1.0 + mod_depth))
+        lo_gain = amplitude * (1.0 - hi_mix) * norm
+        hi_gain = amplitude * hi_mix * norm
 
     for start in range(0, n, CHUNK_SIZE):
         end = min(start + CHUNK_SIZE, n)
@@ -131,12 +132,18 @@ def parse_args():
         "--hi-carrier", type=float, default=400,
         help="Carrier frequency for the high layer (Hz)"
     )
+    parser.add_argument(
+        "--hi-mix", type=float, default=0.5,
+        help="High layer mix ratio 0–1 (default: 0.5)"
+    )
     args = parser.parse_args()
 
     if args.volume < 0 or args.volume > 1:
         parser.error("--volume must be between 0 and 1")
     if args.mod_depth < 0 or args.mod_depth > 1:
         parser.error("--mod-depth must be between 0 and 1")
+    if args.hi_mix < 0 or args.hi_mix > 1:
+        parser.error("--hi-mix must be between 0 and 1")
 
     return args
 
@@ -163,7 +170,7 @@ def main():
     print(f"Generating {args.duration}s {label}...")
     chunks = generate(
         args.carrier, beat, args.duration, SAMPLE_RATE, args.volume, args.fade,
-        f_hi, args.hi_mode, args.mod_depth, args.hi_carrier
+        f_hi, args.hi_mode, args.mod_depth, args.hi_carrier, args.hi_mix
     )
     write_wav(str(out), chunks, SAMPLE_RATE)
     print(f"Wrote {out}")

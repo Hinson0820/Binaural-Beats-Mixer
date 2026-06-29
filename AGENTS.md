@@ -29,6 +29,7 @@ python binaural_beats.py -c 200 -b 10 -d 300 -v 0.3
 | `--hi-mode` | binaural | `mono` or `binaural` — high layer presentation |
 | `--mod-depth` | 0.5 | Modulation depth 0–1 for CFC envelope |
 | `--hi-carrier` | 400 | Carrier frequency for the high layer (Hz) |
+| `--hi-mix` | 0.5 | High layer mix ratio 0–1 — lower = quieter high part |
 
 ## Presets
 

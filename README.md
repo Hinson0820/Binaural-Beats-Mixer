@@ -56,6 +56,18 @@ python binaural_beats.py -p alpha -d 600 -o alpha_10min.wav
 - **Keep volume moderate** (≤ 0.5–0.6). Louder does not mean stronger entrainment.
 - If you have epilepsy, consult a doctor before using rhythmic audio stimulation.
 
+## The Oster curve
+
+[Gerald Oster's 1973 research](https://www.binauralbeatsmeditation.com/oster-curve/) mapped how clearly binaural beats are perceived across different carrier frequencies. The curve peaks around **440–460 Hz** (strongest perception) and falls off below ~100 Hz and above ~800 Hz.
+
+Our defaults sit deliberately on the curve:
+- **200 Hz** low carrier — near the theta/alpha sweet spot
+- **400 Hz** high carrier — near the high beta peak
+
+![Oster curve](docs/oster-curve.png)
+
+Regenerate the plot with `python plot_oster.py` (requires `matplotlib`).
+
 ## Usage
 
 ```
@@ -80,6 +92,7 @@ python binaural_beats.py [-h] [-p PRESET] [-c CARRIER] [-b BEAT] [-d DURATION]
 | `--hi-mode` | `binaural` | `mono` or `binaural` — high layer presentation |
 | `--mod-depth` | 0.5 | Modulation depth 0–1 for CFC envelope |
 | `--hi-carrier` | 400 Hz | Carrier frequency for the high layer |
+| `--hi-mix` | 0.5 | High layer mix ratio 0–1 — lower = quieter high part |
 
 ### Examples
 
@@ -113,15 +126,17 @@ High layer stereo presentation controlled by `--hi-mode`:
 
 | Mode | Left ear | Right ear | What you get |
 |------|----------|-----------|--------------|
-| `binaural` | `hi_carrier − f_hi/2` | `hi_carrier + f_hi/2` | Second binaural beat at `f_hi` Hz (richer, immersive) |
-| `mono` | `hi_carrier` | `hi_carrier` | Same tone both ears (cleaner, less stereo clutter) |
+| `binaural` | `hi_carrier − f_hi/2` | `hi_carrier + f_hi/2` | Second binaural beat at `f_hi` Hz |
+| `mono` | `hi_carrier` | `hi_carrier` | Same tone both ears |
+
+The Oster curve at 400 Hz peaks around **~26 Hz (high beta)**. For `f_hi` at gamma (40 Hz+), the binaural beat is past the curve's peak and harder to perceive — use **`--hi-mode mono`** so the high frequency content is physically present in the waveform, not reliant on the stereo illusion. For `f_hi` ≤ 30 Hz (beta or lower), `binaural` mode works well.
 
 Both layers are normalized so `--volume` means the same peak level regardless of CFC settings.
 
 ### CFC cautions
 
 - **Start with low mod_depth** (0.2–0.4). High depth can sound warbling or unsettling.
-- **`--hi-mode binaural` adds a second binaural beat** — may feel overstimulating for sleep or beginners. Use `mono` for a gentler experience.
+- **`--hi-mode mono` is recommended for gamma** (40 Hz+) — the binaural beat at 400 Hz + 40 Hz is hard for the brain to detect.
 - **Keep carriers separated** — `--carrier` (200) and `--hi-carrier` (400) are an octave apart, which prevents frequency masking.
 - **Low beat + high mod_depth** (e.g., delta at 2 Hz with depth 0.8+) can pulse slowly enough to be distracting rather than relaxing.
 
