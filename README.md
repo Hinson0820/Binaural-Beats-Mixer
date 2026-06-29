@@ -1,6 +1,6 @@
 # Binaural Beats Mixer
 
-Generate binaural beats — stereo audio tones that encourage specific brainwave states. Requires only `numpy`.
+Generate binaural beats and cross-frequency coupled (CFC) audio — stereo tones for brainwave entrainment. Requires only `numpy`.
 
 ## Quick start
 
@@ -10,34 +10,76 @@ pip install numpy
 python binaural_beats.py -p alpha -d 600 -o alpha_10min.wav
 ```
 
-## Frequency table
+## Sub-bands reference
 
-| Preset | Beat freq | Brainwave band | Associated state |
-|--------|-----------|----------------|------------------|
-| `delta` | 2 Hz | Delta (0.5–4 Hz) | Deep sleep |
-| `theta` | 6 Hz | Theta (4–8 Hz) | Meditation, REM |
-| `alpha` | 10 Hz | Alpha (8–13 Hz) | Relaxed focus |
-| `beta` | 20 Hz | Beta (13–30 Hz) | Concentration |
-| `gamma` | 40 Hz | Gamma (30+ Hz) | Peak cognition |
+| Band | Sub-band | Range | Details | Caution |
+|------|----------|-------|---------|---------|
+| **Epsilon** | — | 0.1–0.5 Hz | Deepest sleep, unconsciousness, void-like state | Never while driving |
+| **Delta** | Low Delta | 0.5–2.0 Hz | Physical regeneration, cellular clean-up, hormone release | Drowsiness — not for active tasks |
+| | High Delta | 2.0–4.0 Hz | Transition to light sleep; present in brain injuries or severe learning fatigue | Drowsiness — not for active tasks |
+| **Theta** | Low Theta | 4.0–5.5 Hz | Deep emotional processing, twilight dreaming, long-term memory access | Impaired focus |
+| | High Theta | 5.5–8.0 Hz | Working memory, spatial navigation, creative flow states | Impaired focus |
+| **Alpha** | Low Alpha | 8.0–10.0 Hz | Emotional calming, physical relaxation, internal idling | May cause drowsiness |
+| | High Alpha | 10.0–12.0 Hz | Top-down selective attention, cognitive speed, peak performance | Caution when driving |
+| **Beta** | Low Beta / SMR | 12.0–15.0 Hz | Relaxed focused attention, external processing without tension | Generally safe |
+| | Mid Beta | 15.0–20.0 Hz | Active mental energy, analytic thinking, high alertness | May interfere with sleep |
+| | High Beta | 20.0–30.0 Hz | Hyper-vigilance, stress rumination, fight-or-flight | Can trigger anxiety or panic |
+| **Gamma** | Low Gamma | 30.0–45.0 Hz | Sensory binding — unified visual, auditory, tactile perception | Intense at high volume |
+| | High Gamma | 45.0–100.0 Hz | Peak learning spikes, complex problem-solving, linguistic tasks | Intense at high volume |
+| **Lambda** | — | ~200 Hz | Visual processing, saccade-related (not entrained) | Informational only |
+
+### Our presets
+
+| Preset | Beat | Primary band | Sub-band(s) | Use case |
+|--------|------|-------------|-------------|----------|
+| `delta` | 2 Hz | Delta | Low Delta | Deep sleep, rest |
+| `theta` | 6 Hz | Theta | Low–High Theta | Meditation, creativity |
+| `alpha` | 10 Hz | Alpha | Low–High Alpha | Relaxed focus, calm |
+| `beta` | 20 Hz | Beta | Mid–High Beta | Concentration, study |
+| `gamma` | 40 Hz | Gamma | Low–High Gamma | Peak cognition, insight |
+
+### CFC presets
+
+| Preset | Beat + f_hi | Effect | Caution |
+|--------|-------------|--------|---------|
+| `theta-gamma` | 6 + 40 Hz | Lucid dreaming, hypnagogic awareness — theta dream-states with gamma self-awareness. The same coupling seen in REM sleep when frontal gamma spikes and the sleeper "wakes up" within the dream. | Best used right before sleep or during meditation. May induce sleep paralysis in the transition zone — start with short sessions. Not for driving. |
+| `delta-gamma` | 2 + 40 Hz | Conscious deep rest — awareness persisting through delta-level regeneration. Memory consolidation, *yoga nidra*-like state. The body is in deep sleep but a thread of awareness remains. | Strictly for sleep or deep rest sessions. Start with `--mod-depth 0.3` — slow pulsing can be distracting at high depth. Not for driving. |
+| `alpha-gamma` | 10 + 40 Hz | Flow state — alpha's relaxed spaciousness with gamma's cognitive binding. The 10 Hz rhythm is naturally pleasant, like a gentle shimmer. | Generally safe and comfortable. Best for creative work or light meditation. |
+| `theta-beta` | 6 + 18 Hz | Attention regulation — theta's dreamy awareness coupled with beta's active focus. Balances inward reflection with outward alertness. | Not for sleep. Works well for reading, studying, or tasks that need sustained attention without hyper-focus. |
+
+### Warnings
+
+- **Delta and theta** cause drowsiness. Never listen while driving, operating machinery, or doing tasks requiring alertness.
+- **Alpha** can impair reaction time — test your response before driving.
+- **High beta** (20+ Hz) can increase anxiety in sensitive individuals — start with short sessions, keep volume low.
+- **Always use headphones** — binaural beats require isolation between ears. Speakers collapse the stereo field and the effect is lost.
+- **Keep volume moderate** (≤ 0.5–0.6). Louder does not mean stronger entrainment.
+- If you have epilepsy, consult a doctor before using rhythmic audio stimulation.
 
 ## Usage
 
 ```
 python binaural_beats.py [-h] [-p PRESET] [-c CARRIER] [-b BEAT] [-d DURATION]
                          [-o OUTPUT] [-v VOLUME] [-f FADE]
+                         [--f-hi F_HI] [--hi-mode {mono,binaural}]
+                         [--mod-depth MOD_DEPTH] [--hi-carrier HI_CARRIER]
 ```
 
 ### Options
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `-p, --preset` | — | Preset name (overrides `--beat`) |
-| `-c, --carrier` | 200 Hz | Center frequency |
+| `-p, --preset` | — | Preset name (overrides `--beat`/`--f-hi`) |
+| `-c, --carrier` | 200 Hz | Center carrier frequency |
 | `-b, --beat` | 10 Hz | Beat (difference) frequency |
 | `-d, --duration` | 300 s | Output length |
 | `-o, --output` | `binaural.wav` | Output filename (saved in `output/`) |
 | `-v, --volume` | 0.5 | Amplitude (0–1) |
 | `-f, --fade` | 0.5 s | Fade in/out length |
+| `--f-hi` | — | High (nested) frequency for CFC mode (Hz) |
+| `--hi-mode` | `binaural` | `mono` or `binaural` — high layer presentation |
+| `--mod-depth` | 0.5 | Modulation depth 0–1 for CFC envelope |
+| `--hi-carrier` | 400 Hz | Carrier frequency for the high layer |
 
 ### Examples
 
@@ -45,26 +87,54 @@ python binaural_beats.py [-h] [-p PRESET] [-c CARRIER] [-b BEAT] [-d DURATION]
 # 10-minute theta meditation track
 python binaural_beats.py -p theta -d 600 -o meditate.wav
 
-# 5-minute alpha at 30% volume
-python binaural_beats.py -p alpha -d 300 -v 0.3 -o quiet.wav
+# Theta-gamma CFC with two binaural beats (alert meditation)
+python binaural_beats.py --f-hi 40 -p theta -d 600 -o theta_gamma.wav
 
-# Custom: 180 Hz carrier, 15 Hz beat, 20 minutes
-python binaural_beats.py -c 180 -b 15 -d 1200 -o custom.wav
+# Same, but with mono high tone instead of binaural
+python binaural_beats.py --f-hi 40 --hi-mode mono -p theta -d 600 -o theta_gamma_m.wav
 
-# Long fade (2 seconds) for smooth meditation entry/exit
-python binaural_beats.py -p delta -f 2 -o deep_sleep.wav
+# Subtle coupling for sleep
+python binaural_beats.py --f-hi 40 --mod-depth 0.3 -p delta -d 1800
+
+# Using a combined CFC preset
+python binaural_beats.py -p theta-gamma -d 600 -o monk_track.wav
 ```
 
-## How it works
+## CFC mode
+
+Cross-Frequency Coupling (CFC) mimics how the brain coordinates oscillations across different frequency bands — most commonly **phase-amplitude coupling (PAC)**, where a slow rhythm's phase controls the amplitude of a faster rhythm.
+
+When `--f-hi` is set, two layers are generated and summed:
+
+1. **Low layer** — binaural beat at `beat` Hz on `carrier` Hz (L/R detuned). Entrains the slow rhythm.
+2. **High layer** — tone at `hi_carrier` Hz, amplitude-modulated at `beat` Hz via `envelope = 1 + mod_depth × sin(2π × beat × t)`. The fast tone's volume pulses with the slow rhythm — this is the coupling.
+
+High layer stereo presentation controlled by `--hi-mode`:
+
+| Mode | Left ear | Right ear | What you get |
+|------|----------|-----------|--------------|
+| `binaural` | `hi_carrier − f_hi/2` | `hi_carrier + f_hi/2` | Second binaural beat at `f_hi` Hz (richer, immersive) |
+| `mono` | `hi_carrier` | `hi_carrier` | Same tone both ears (cleaner, less stereo clutter) |
+
+Both layers are normalized so `--volume` means the same peak level regardless of CFC settings.
+
+### CFC cautions
+
+- **Start with low mod_depth** (0.2–0.4). High depth can sound warbling or unsettling.
+- **`--hi-mode binaural` adds a second binaural beat** — may feel overstimulating for sleep or beginners. Use `mono` for a gentler experience.
+- **Keep carriers separated** — `--carrier` (200) and `--hi-carrier` (400) are an octave apart, which prevents frequency masking.
+- **Low beat + high mod_depth** (e.g., delta at 2 Hz with depth 0.8+) can pulse slowly enough to be distracting rather than relaxing.
+
+## How simple binaural works
 
 Each ear receives a pure sine wave at slightly different frequencies:
 
 - Left channel: `carrier - beat/2`
 - Right channel: `carrier + beat/2`
 
-The brain perceives the difference (`beat` Hz) as a rhythmic pulse — the binaural beat. Use stereo headphones for the effect.
+The brain perceives the difference (`beat` Hz) as a rhythmic pulse — the binaural beat. This works because the brain's superior olivary nucleus detects the phase difference between the two ears. Use stereo headphones — speakers mix the signals in the air and the effect is lost.
 
-A raised-cosine (Hann) fade in/out prevents clicks.
+A raised-cosine (Hann) fade in/out prevents clicks at start and end.
 
 All generated files go in `output/` (gitignored). Pass just a filename to `-o`, the directory is automatic.
 
