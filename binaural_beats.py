@@ -34,7 +34,7 @@ def _accumulate_phase(phi_start, freq, sr):
 
 def generate(carrier, beat, duration, sr, amplitude, fade,
              f_hi=None, hi_mode="binaural", mod_depth=0.5, hi_carrier=400,
-             hi_mix=0.5, iso_depth=1.0):
+             hi_mix=0.5, iso_depth=1.0, phase_offset=0.0):
     n = int(sr * duration)
     fade_n = min(int(fade * sr), n // 2)
     is_cfc = f_hi is not None and f_hi > 0
@@ -70,7 +70,8 @@ def generate(carrier, beat, duration, sr, amplitude, fade,
         right = amplitude * np.sin(phi_c + phi_b)
 
         if is_cfc:
-            envelope = 1.0 + mod_depth * np.cos(2 * np.pi * beat * (start + np.arange(local_n)) / sr)
+            phase_rad = np.deg2rad(phase_offset)
+            envelope = 1.0 + mod_depth * np.cos(2 * np.pi * beat * (start + np.arange(local_n)) / sr + phase_rad)
 
             lo_left = lo_gain * np.sin(phi_c - phi_b)
             lo_right = lo_gain * np.sin(phi_c + phi_b)
@@ -199,6 +200,7 @@ def generate_session(segments, crossfade, sr, amplitude, fade):
         hi_mode_arr = seg_val_cat("hi_mode", seg_idx)
         vol_arr = seg_val_snap("volume", seg_idx, default=amplitude)
         iso_depth_arr = seg_val_snap("iso_depth", seg_idx, default=1.0)
+        phase_offset_arr = np.deg2rad(seg_val(t, seg_idx, "phase_offset", default=0.0))
 
         phi_c, phi_c_end = _accumulate_phase(phi_carrier, carrier_arr, sr)
         phi_b, phi_b_end = _accumulate_phase(phi_beat, beat_arr / 2, sr)
@@ -215,7 +217,7 @@ def generate_session(segments, crossfade, sr, amplitude, fade):
         lo_left = lo_gain * np.sin(phi_c - phi_b)
         lo_right = lo_gain * np.sin(phi_c + phi_b)
 
-        envelope = 1.0 + mod_depth_arr * np.cos(2 * np.pi * beat_arr * t)
+        envelope = 1.0 + mod_depth_arr * np.cos(2 * np.pi * beat_arr * t + phase_offset_arr)
 
         mask_bi = hi_mode_arr == "binaural"
         mask_iso = ~mask_bi
@@ -318,6 +320,10 @@ def parse_args():
         help="Isochronic pulse depth 0–1 — 1=fully mutes between pulses, 0=no pulse (default: 1.0)"
     )
     parser.add_argument(
+        "--phase-offset", type=float, default=0,
+        help="High layer envelope phase offset in degrees (0–360); 0=peak alignment with beat, 180=trough alignment"
+    )
+    parser.add_argument(
         "--session-file", type=str, default=None,
         help="JSON session file with segment definitions"
     )
@@ -339,6 +345,8 @@ def parse_args():
         parser.error("--hi-mix must be between 0 and 1")
     if args.iso_depth < 0 or args.iso_depth > 1:
         parser.error("--iso-depth must be between 0 and 1")
+    if args.phase_offset < 0 or args.phase_offset > 360:
+        parser.error("--phase-offset must be between 0 and 360")
 
     return args
 
@@ -357,6 +365,7 @@ def load_session(path, args):
         "hi_mix": args.hi_mix,
         "volume": args.volume,
         "iso_depth": args.iso_depth,
+        "phase_offset": args.phase_offset,
     }
 
     segments = []
@@ -402,7 +411,8 @@ def _viz_layers(seg, sr, sample_offset, n_samples):
 
     high_sum = np.zeros(n_samples)
     if has_high:
-        envelope = 1.0 + mod_depth * np.cos(2 * np.pi * seg["beat"] * t)
+        phase_rad = np.deg2rad(seg.get("phase_offset", 0))
+        envelope = 1.0 + mod_depth * np.cos(2 * np.pi * seg["beat"] * t + phase_rad)
         hi_carrier = seg.get("hi_carrier", 400)
         f_hi = seg.get("f_hi") or 0
 
@@ -537,15 +547,18 @@ def main():
         label = f"binaural beat @ {beat} Hz"
         if f_hi:
             if args.hi_mode == "iso":
-                label += f" + iso CFC @ {f_hi} Hz (iso-depth {args.iso_depth}, mod-depth {args.mod_depth})"
+                label += f" + iso CFC @ {f_hi} Hz (iso-depth {args.iso_depth}, mod-depth {args.mod_depth}"
             else:
-                label += f" + binaural CFC @ {f_hi} Hz (depth {args.mod_depth})"
+                label += f" + binaural CFC @ {f_hi} Hz (depth {args.mod_depth}"
+            if args.phase_offset:
+                label += f", phase-offset {args.phase_offset} deg"
+            label += ")"
 
         print(f"Generating {args.duration}s {label}...")
         chunks = generate(
             args.carrier, beat, args.duration, SAMPLE_RATE, args.volume, args.fade,
             f_hi, args.hi_mode, args.mod_depth, args.hi_carrier, args.hi_mix,
-            args.iso_depth
+            args.iso_depth, args.phase_offset
         )
         write_wav(str(out), chunks, SAMPLE_RATE)
         print(f"Wrote {out}")
@@ -560,6 +573,7 @@ def main():
             "hi_mix": args.hi_mix,
             "volume": args.volume,
             "iso_depth": args.iso_depth,
+            "phase_offset": args.phase_offset,
             "duration": args.duration,
             "desc": label,
         }]

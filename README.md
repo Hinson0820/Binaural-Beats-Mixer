@@ -38,6 +38,7 @@ python binaural_beats.py [-h] [-p PRESET] [-c CARRIER] [-b BEAT] [-d DURATION]
                          [--f-hi F_HI] [--hi-mode {iso,binaural}]
                          [--mod-depth MOD_DEPTH] [--hi-carrier HI_CARRIER]
                          [--hi-mix HI_MIX] [--iso-depth ISO_DEPTH]
+                         [--phase-offset PHASE_OFFSET]
                          [--session-file SESSION_FILE] [--crossfade CROSSFADE]
                          [--visualize]
 ```
@@ -59,6 +60,7 @@ python binaural_beats.py [-h] [-p PRESET] [-c CARRIER] [-b BEAT] [-d DURATION]
 | `--hi-carrier` | 400 Hz | Carrier frequency for the high layer |
 | `--hi-mix` | 0.5 | High layer mix ratio 0–1 — lower = quieter high part |
 | `--iso-depth` | 1.0 | Isochronic pulse depth 0–1 — 1 = fully mutes between pulses, 0 = no pulse |
+| `--phase-offset` | 0° | High layer envelope phase offset (0–360). 0° = peak aligns with beat, 180° = trough aligns with beat |
 | `--session-file` | — | JSON session file with segment definitions |
 | `--crossfade` | 30 s | Sweep duration between segments in session mode |
 | `--visualize` | — | Generate waveform visualization (requires `matplotlib`) |
@@ -121,6 +123,7 @@ inherit from CLI defaults (no inter-segment inheritance).
 | `hi_mix` | `--hi-mix` | High layer mix ratio 0–1 |
 | `volume` | `--volume` | Amplitude 0–1 |
 | `iso_depth` | `--iso-depth` | Isochronic pulse depth 0–1 |
+| `phase_offset` | `--phase-offset` | High layer envelope phase offset 0–360° |
 | `desc` | (informational) | Description label |
 
 Each segment is fully explicit: all missing fields resolve to the CLI defaults,
@@ -175,7 +178,7 @@ When `--f-hi` is set, two layers are generated and summed:
 1. **Low layer** — binaural beat at `beat` Hz on `carrier` Hz (L/R detuned).
    Entrains the slow rhythm.
 2. **High layer** — tone at `hi_carrier` Hz, amplitude-modulated at `beat`
-   Hz via `envelope = 1 + mod_depth × cos(2π × beat × t)`. The fast tone's
+   Hz via `envelope = 1 + mod_depth × cos(2π × beat × t + phase_offset)`. The fast tone's
    volume pulses with the slow rhythm — this is the coupling.
 
 High layer stereo presentation controlled by `--hi-mode`:
@@ -191,7 +194,7 @@ In `iso` mode, the high layer is a carrier tone at `hi_carrier` Hz that pulses
 
 ```
 gamma_pulse = (1 - iso_depth) + iso_depth × 0.5 × (1 + sin(2π × f_hi × t))
-theta_env   = 1 + mod_depth × cos(2π × beat × t)
+theta_env   = 1 + mod_depth × cos(2π × beat × t + phase_offset)
 high_layer  = hi_gain × theta_env × gamma_pulse × sin(2π × hi_carrier × t)
 ```
 
