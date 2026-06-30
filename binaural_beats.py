@@ -34,7 +34,7 @@ def _accumulate_phase(phi_start, freq, sr):
 
 def generate(carrier, beat, duration, sr, amplitude, fade,
              f_hi=None, hi_mode="binaural", mod_depth=0.5, hi_carrier=400,
-             hi_mix=0.5):
+             hi_mix=0.5, iso_depth=1.0):
     n = int(sr * duration)
     fade_n = min(int(fade * sr), n // 2)
     is_cfc = f_hi is not None and f_hi > 0
@@ -81,7 +81,7 @@ def generate(carrier, beat, duration, sr, amplitude, fade,
                 phi_hc, phi_hc_end = _accumulate_phase(phi_hi_carrier, f_carrier_iso, sr)
                 phi_p, phi_p_end = _accumulate_phase(phi_hi_beat, f_pulse, sr)
                 phi_hi_carrier, phi_hi_beat = phi_hc_end, phi_p_end
-                gamma_pulse = 0.5 * (1.0 + np.sin(phi_p))
+                gamma_pulse = (1.0 - iso_depth) + iso_depth * 0.5 * (1.0 + np.sin(phi_p))
                 hi_left = hi_gain * envelope * gamma_pulse * np.sin(phi_hc)
                 hi_right = hi_gain * envelope * gamma_pulse * np.sin(phi_hc)
             else:
@@ -166,6 +166,17 @@ def generate_session(segments, crossfade, sr, amplitude, fade):
                     result[mask] = val
         return result
 
+    def seg_val_snap(key, seg_idx, default=0.0):
+        """Return per-sample numeric values with no sweep (snap at boundary)."""
+        result = np.full(len(seg_idx), default, dtype=float)
+        for i, seg in enumerate(segments):
+            mask = seg_idx == i
+            if mask.any():
+                val = seg.get(key)
+                if val is not None:
+                    result[mask] = val
+        return result
+
     phi_carrier = 0.0
     phi_beat = 0.0
     phi_hi_carrier = 0.0
@@ -186,6 +197,8 @@ def generate_session(segments, crossfade, sr, amplitude, fade):
         mod_depth_arr = seg_val(t, seg_idx, "mod_depth")
         hi_mix_arr = seg_val(t, seg_idx, "hi_mix")
         hi_mode_arr = seg_val_cat("hi_mode", seg_idx)
+        vol_arr = seg_val_snap("volume", seg_idx, default=amplitude)
+        iso_depth_arr = seg_val_snap("iso_depth", seg_idx, default=1.0)
 
         phi_c, phi_c_end = _accumulate_phase(phi_carrier, carrier_arr, sr)
         phi_b, phi_b_end = _accumulate_phase(phi_beat, beat_arr / 2, sr)
@@ -196,8 +209,8 @@ def generate_session(segments, crossfade, sr, amplitude, fade):
         lo_mix = 1.0 - hi_mix_arr
         denom = lo_mix + hi_mix_arr * (1.0 + mod_depth_arr)
         norm = np.where(denom > 0, 1.0 / denom, 1.0)
-        lo_gain = amplitude * lo_mix * norm
-        hi_gain = amplitude * hi_mix_arr * norm
+        lo_gain = vol_arr * lo_mix * norm
+        hi_gain = vol_arr * hi_mix_arr * norm
 
         lo_left = lo_gain * np.sin(phi_c - phi_b)
         lo_right = lo_gain * np.sin(phi_c + phi_b)
@@ -220,7 +233,7 @@ def generate_session(segments, crossfade, sr, amplitude, fade):
             phi_hc, phi_hc_end = _accumulate_phase(phi_hi_carrier, hi_carrier_arr, sr)
             phi_hp, phi_hp_end = _accumulate_phase(phi_hi_beat, f_hi_arr, sr)
             phi_hi_carrier, phi_hi_beat = phi_hc_end, phi_hp_end
-            gamma_pulse = 0.5 * (1.0 + np.sin(phi_hp))
+            gamma_pulse = (1.0 - iso_depth_arr) + iso_depth_arr * 0.5 * (1.0 + np.sin(phi_hp))
             hi_left[mask_iso] = (hi_gain * envelope * gamma_pulse * np.sin(phi_hc))[mask_iso]
             hi_right[mask_iso] = (hi_gain * envelope * gamma_pulse * np.sin(phi_hc))[mask_iso]
 
@@ -301,6 +314,10 @@ def parse_args():
         help="High layer mix ratio 0–1 — lower = quieter high part"
     )
     parser.add_argument(
+        "--iso-depth", type=float, default=1.0,
+        help="Isochronic pulse depth 0–1 — 1=fully mutes between pulses, 0=no pulse (default: 1.0)"
+    )
+    parser.add_argument(
         "--session-file", type=str, default=None,
         help="JSON session file with segment definitions"
     )
@@ -316,6 +333,8 @@ def parse_args():
         parser.error("--mod-depth must be between 0 and 1")
     if args.hi_mix < 0 or args.hi_mix > 1:
         parser.error("--hi-mix must be between 0 and 1")
+    if args.iso_depth < 0 or args.iso_depth > 1:
+        parser.error("--iso-depth must be between 0 and 1")
 
     return args
 
@@ -332,19 +351,19 @@ def load_session(path, args):
         "mod_depth": args.mod_depth,
         "hi_carrier": args.hi_carrier,
         "hi_mix": args.hi_mix,
+        "volume": args.volume,
+        "iso_depth": args.iso_depth,
     }
 
     segments = []
-    prev = dict(defaults)
     for i, entry in enumerate(raw):
         if "duration" not in entry:
             raise ValueError(f"Segment {i} missing 'duration'")
         if entry["duration"] <= 0:
             raise ValueError(f"Segment {i} duration must be positive")
-        seg = dict(prev)
+        seg = dict(defaults)
         seg.update(entry)
         segments.append(seg)
-        prev = seg
 
     return segments
 
@@ -378,13 +397,16 @@ def main():
 
     label = f"binaural beat @ {beat} Hz"
     if f_hi:
-        hi_label = "binaural" if args.hi_mode == "binaural" else "iso"
-        label += f" + {hi_label} CFC @ {f_hi} Hz (depth {args.mod_depth})"
+        if args.hi_mode == "iso":
+            label += f" + iso CFC @ {f_hi} Hz (iso-depth {args.iso_depth}, mod-depth {args.mod_depth})"
+        else:
+            label += f" + binaural CFC @ {f_hi} Hz (depth {args.mod_depth})"
 
     print(f"Generating {args.duration}s {label}...")
     chunks = generate(
         args.carrier, beat, args.duration, SAMPLE_RATE, args.volume, args.fade,
-        f_hi, args.hi_mode, args.mod_depth, args.hi_carrier, args.hi_mix
+        f_hi, args.hi_mode, args.mod_depth, args.hi_carrier, args.hi_mix,
+        args.iso_depth
     )
     write_wav(str(out), chunks, SAMPLE_RATE)
     print(f"Wrote {out}")
