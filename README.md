@@ -13,7 +13,7 @@ python binaural_beats.py -p alpha -d 600 -o alpha_10min.wav
 ## Warnings
 
 - **Delta and theta** cause drowsiness. Never listen while driving, operating machinery, or doing tasks requiring alertness.
-- **Alpha** can impair reaction time — test your response before driving.
+- **Alpha** — do not drive or operate machinery while listening.
 - **High beta** (20+ Hz) can increase anxiety in sensitive individuals — start with short sessions, keep volume low.
 - **Always use headphones** — binaural beats require isolation between ears. Speakers collapse the stereo field and the effect is lost.
 - **Keep volume moderate** (≤ 0.5–0.6). Louder does not mean stronger entrainment.
@@ -93,19 +93,19 @@ inherit from CLI defaults (no inter-segment inheritance).
 ]
 ```
 
-| Field | Default | Description |
-|-------|---------|-------------|
-| `duration` | — | Segment length in seconds (required) |
-| `beat` | CLI `--beat` | Beat frequency (Hz) |
-| `carrier` | CLI `--carrier` | Carrier frequency (Hz) |
-| `f_hi` | CLI `--f-hi` or null | High frequency for CFC mode |
-| `hi_mode` | CLI `--hi-mode` or `"binaural"` | `"iso"` or `"binaural"` |
-| `mod_depth` | CLI `--mod-depth` | Modulation depth 0–1 |
-| `hi_carrier` | CLI `--hi-carrier` | High layer carrier (Hz) |
-| `hi_mix` | CLI `--hi-mix` | High layer mix ratio 0–1 |
-| `volume` | CLI `--volume` | Amplitude 0–1 |
-| `iso_depth` | CLI `--iso-depth` | Isochronic pulse depth 0–1 |
-| `desc` | — | Description (informational only) |
+| Field | Falls back to | Description |
+|-------|---------------|-------------|
+| `duration` | (required) | Segment length in seconds |
+| `beat` | `--beat` | Beat frequency (Hz) |
+| `carrier` | `--carrier` | Carrier frequency (Hz) |
+| `f_hi` | `--f-hi` | High frequency for CFC mode |
+| `hi_mode` | `--hi-mode` | `"iso"` or `"binaural"` |
+| `mod_depth` | `--mod-depth` | Modulation depth 0–1 |
+| `hi_carrier` | `--hi-carrier` | High layer carrier (Hz) |
+| `hi_mix` | `--hi-mix` | High layer mix ratio 0–1 |
+| `volume` | `--volume` | Amplitude 0–1 |
+| `iso_depth` | `--iso-depth` | Isochronic pulse depth 0–1 |
+| `desc` | (informational) | Description label |
 
 Each segment is fully explicit: all missing fields resolve to the CLI defaults,
 not the previous segment. To disable the high layer on a segment, set
