@@ -39,7 +39,7 @@ python binaural_beats.py [-h] [-p PRESET] [-c CARRIER] [-b BEAT] [-d DURATION]
 | `-b, --beat` | 10 Hz | Beat (difference) frequency |
 | `-d, --duration` | 300 s | Output length |
 | `-o, --output` | `binaural.wav` | Output filename (saved in `output/`) |
-| `-v, --volume` | 0.5 | Amplitude (0–1) |
+| `-v, --volume` | 0.2 | Amplitude (0–1) |
 | `-f, --fade` | 0.5 s | Fade in/out length |
 | `--f-hi` | — | High (nested) frequency for CFC mode (Hz) |
 | `--hi-mode` | `binaural` | `iso` or `binaural` — high layer presentation |

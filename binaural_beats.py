@@ -287,7 +287,7 @@ def parse_args():
         help="Output filename (saved in output/)"
     )
     parser.add_argument(
-        "-v", "--volume", type=float, default=0.5, help="Amplitude 0–1"
+        "-v", "--volume", type=float, default=0.2, help="Amplitude 0–1"
     )
     parser.add_argument(
         "-f", "--fade", type=float, default=0.5,
