@@ -16,7 +16,7 @@ python binaural_beats.py -p alpha -d 600 -o alpha_10min.wav
 - **Alpha** — do not drive or operate machinery while listening.
 - **High beta** (20+ Hz) can increase anxiety in sensitive individuals — start with short sessions, keep volume low.
 - **Always use headphones** — binaural beats require isolation between ears. Speakers collapse the stereo field and the effect is lost.
-- **Keep volume moderate** (≤ 0.5–0.6). Louder does not mean stronger entrainment.
+- **Barely audible is fine**. Louder does not mean stronger entrainment.
 - If you have epilepsy, consult a doctor before using rhythmic audio stimulation.
 
 ## Usage
