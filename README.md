@@ -89,10 +89,12 @@ python binaural_beats.py [-h] [-p PRESET] [-c CARRIER] [-b BEAT] [-d DURATION]
 | `-v, --volume` | 0.5 | Amplitude (0–1) |
 | `-f, --fade` | 0.5 s | Fade in/out length |
 | `--f-hi` | — | High (nested) frequency for CFC mode (Hz) |
-| `--hi-mode` | `binaural` | `mono` or `binaural` — high layer presentation |
+| `--hi-mode` | `binaural` | `iso` or `binaural` — high layer presentation |
 | `--mod-depth` | 0.5 | Modulation depth 0–1 for CFC envelope |
 | `--hi-carrier` | 400 Hz | Carrier frequency for the high layer |
 | `--hi-mix` | 0.5 | High layer mix ratio 0–1 — lower = quieter high part |
+| `--session-file` | — | JSON session file with segment definitions |
+| `--crossfade` | 30 s | Sweep duration between segments in session mode |
 
 ### Examples
 
@@ -111,6 +113,66 @@ python binaural_beats.py --f-hi 40 --mod-depth 0.3 -p delta -d 1800
 
 # Using a combined CFC preset
 python binaural_beats.py -p theta-gamma -d 600 -o monk_track.wav
+
+# Multi-segment session from a JSON file
+python binaural_beats.py --session-file sessions/meditation.json -o session.wav
+```
+
+## Session mode
+
+Combine multiple segments into a single session file for progressive sessions —
+e.g., start with alpha for focus, then theta-gamma for deep meditation, then
+delta for rest. Segments transition via a smooth crossfade sweep.
+
+### Session file format
+
+A JSON array of segment objects. All fields are optional except `duration`;
+omitted fields inherit from the previous segment or the CLI default.
+
+```json
+[
+  {"beat": 10, "carrier": 200, "duration": 300, "desc": "focus"},
+  {"beat": 6,  "duration": 300, "f_hi": 40, "hi_mode": "mono",
+   "desc": "deep meditation"},
+  {"beat": 2,  "duration": 300, "desc": "settle down"}
+]
+```
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `duration` | — | Segment length in seconds (required) |
+| `beat` | CLI `--beat` | Beat frequency (Hz) |
+| `carrier` | CLI `--carrier` | Carrier frequency (Hz) |
+| `f_hi` | CLI `--f-hi` or null | High frequency for CFC mode |
+| `hi_mode` | CLI `--hi-mode` or `"binaural"` | `"iso"` or `"binaural"` |
+| `mod_depth` | CLI `--mod-depth` | Modulation depth 0–1 |
+| `hi_carrier` | CLI `--hi-carrier` | High layer carrier (Hz) |
+| `hi_mix` | CLI `--hi-mix` | High layer mix ratio 0–1 |
+| `desc` | — | Description (informational only) |
+
+Inheritance: if a segment only sets `beat` and `duration`, all other params
+carry over from the prior segment. To disable CFC after a CFC segment, set
+`"f_hi": null` — the next segment then reverts to simple binaural.
+
+### Crossfade
+
+During the `--crossfade` period at the start of each segment, numeric
+parameters (beat, carrier, f_hi, hi_carrier, etc.) sweep linearly from the
+previous segment's values to the new segment's values. Categorical parameters
+(`hi_mode`) snap at the boundary.
+
+Transitions between CFC and non-CFC segments: `f_hi` sweeps to or from 0,
+and the gain normalizer adjusts automatically (when `hi_mix` = 0 the CFC
+formula collapses to simple binaural).
+
+### Examples
+
+```powershell
+# 20-minute progressive session
+python binaural_beats.py --session-file sessions/meditation.json -o progressive.wav
+
+# Faster transitions
+python binaural_beats.py --session-file session.json --crossfade 5 -o quick.wav
 ```
 
 ## CFC mode
@@ -124,19 +186,34 @@ When `--f-hi` is set, two layers are generated and summed:
 
 High layer stereo presentation controlled by `--hi-mode`:
 
-| Mode | Left ear | Right ear | What you get |
-|------|----------|-----------|--------------|
-| `binaural` | `hi_carrier − f_hi/2` | `hi_carrier + f_hi/2` | Second binaural beat at `f_hi` Hz |
-| `mono` | `hi_carrier` | `hi_carrier` | Same tone both ears |
+| Mode | What you get | Best for |
+|------|-------------|----------|
+| `binaural` | L/R detuned at `f_hi` Hz: `hi_carrier ± f_hi/2` | Second binaural beat at `f_hi` Hz (≤ 30 Hz) |
+| `iso` | `hi_carrier` Hz tone pulsed at `f_hi` Hz, nested inside `beat`-Hz envelope | Gamma (40 Hz+) where Oster curve drops off |
 
-The Oster curve at 400 Hz peaks around **~26 Hz (high beta)**. For `f_hi` at gamma (40 Hz+), the binaural beat is past the curve's peak and harder to perceive — use **`--hi-mode mono`** so the high frequency content is physically present in the waveform, not reliant on the stereo illusion. For `f_hi` ≤ 30 Hz (beta or lower), `binaural` mode works well.
+In `iso` mode, the high layer is a carrier tone at `hi_carrier` Hz that pulses
+`f_hi` times per second (isochronic tone). That pulse train is itself
+amplitude-modulated by the `beat`-Hz theta envelope, creating nested
+theta-gamma coupling:
+
+```
+gamma_pulse = 0.5 * (1 + sin(2π × f_hi × t))          # 0→1 on/off at f_hi Hz
+theta_env   = 1 + mod_depth × sin(2π × beat × t)       # theta wax/wane
+high_layer  = hi_gain × theta_env × gamma_pulse × sin(2π × hi_carrier × t)
+```
+
+The Oster curve at 400 Hz peaks around **~26 Hz (high beta)**. For `f_hi` at
+gamma (40 Hz+), the binaural beat is past the curve's peak and harder to
+perceive — use **`--hi-mode iso`** so the gamma pulsing is physically present
+in the waveform, not reliant on the stereo illusion. For `f_hi` ≤ 30 Hz (beta
+or lower), `binaural` mode works well.
 
 Both layers are normalized so `--volume` means the same peak level regardless of CFC settings.
 
 ### CFC cautions
 
 - **Start with low mod_depth** (0.2–0.4). High depth can sound warbling or unsettling.
-- **`--hi-mode mono` is recommended for gamma** (40 Hz+) — the binaural beat at 400 Hz + 40 Hz is hard for the brain to detect.
+- **`--hi-mode iso` is recommended for gamma** (40 Hz+) — the binaural beat at 400 Hz + 40 Hz is hard for the brain to detect.
 - **Keep carriers separated** — `--carrier` (200) and `--hi-carrier` (400) are an octave apart, which prevents frequency masking.
 - **Low beat + high mod_depth** (e.g., delta at 2 Hz with depth 0.8+) can pulse slowly enough to be distracting rather than relaxing.
 

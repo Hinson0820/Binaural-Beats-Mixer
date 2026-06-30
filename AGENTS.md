@@ -26,10 +26,45 @@ python binaural_beats.py -c 200 -b 10 -d 300 -v 0.3
 | `-v, --volume` | 0.5 | Amplitude 0–1 |
 | `-f, --fade` | 0.5 | Fade in/out duration (seconds) |
 | `--f-hi` | — | High (nested) frequency for CFC mode (Hz) |
-| `--hi-mode` | binaural | `mono` or `binaural` — high layer presentation |
+| `--hi-mode` | binaural | `iso` or `binaural` — high layer presentation |
 | `--mod-depth` | 0.5 | Modulation depth 0–1 for CFC envelope |
 | `--hi-carrier` | 400 | Carrier frequency for the high layer (Hz) |
 | `--hi-mix` | 0.5 | High layer mix ratio 0–1 — lower = quieter high part |
+| `--session-file` | — | JSON session file with segment definitions |
+| `--crossfade` | 30 | Sweep duration between segments in session mode (seconds) |
+
+## Session mode
+
+Multiple segments in a JSON file, each with independent parameters. All fields
+optional except `duration`; omitted fields inherit from previous segment or CLI
+default. Use `--session-file` instead of single-segment flags like `-b`/`-d`.
+
+### Session file format
+
+```json
+[
+  {"beat": 10, "carrier": 200, "duration": 60, "desc": "focus"},
+  {"beat": 6,  "duration": 60, "f_hi": 40, "hi_mode": "mono",
+   "desc": "deep meditation"},
+  {"beat": 2,  "duration": 60, "f_hi": null, "desc": "settle down"}
+]
+```
+
+Per-segment fields: `beat`, `carrier`, `duration`, `f_hi`, `hi_mode`,
+`mod_depth`, `hi_carrier`, `hi_mix`, `desc` (informational only).
+
+### Architecture (session)
+
+- Per-segment parameter sweeps during `--crossfade` period: numeric params
+  linear interpolated; categorical (`hi_mode`) snaps at segment boundary.
+- `hi_mode="iso"` (isochronic): carrier tone at `hi_carrier` Hz pulsed at
+  `f_hi` Hz (gamma), nested inside the `beat`-Hz theta envelope.
+- CFC/non-CFC transitions: `f_hi` sweeps to/from 0, gain normalizer adjusts
+  automatically (hi_mix=0 makes CFC formula collapse to simple binaural).
+- Phase accumulation (`_accumulate_phase`) carried across chunk boundaries for
+  click-free continuity.
+- `seg_val()` returns per-sample parameter arrays with optional sweep;
+  `seg_val_cat()` returns string arrays (hi_mode) directly.
 
 ## Presets
 
