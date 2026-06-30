@@ -88,8 +88,8 @@ inherit from CLI defaults (no inter-segment inheritance).
   {"beat": 10, "volume": 0.1,  "duration": 300, "desc": "alpha settle"},
   {"beat": 6,  "f_hi": 40, "hi_mode": "iso", "hi_mix": 0.5,
    "volume": 0.18, "duration": 600, "desc": "gamma-theta iso"},
-  {"beat": 2,  "f_hi": null, "volume": 0.03,
-   "duration": 300, "desc": "delta sleep"}
+  {"beat": 2,  "hi_mix": 0, "volume": 0.03,
+    "duration": 300, "desc": "delta sleep"}
 ]
 ```
 
@@ -108,7 +108,10 @@ inherit from CLI defaults (no inter-segment inheritance).
 | `desc` | — | Description (informational only) |
 
 Each segment is fully explicit: all missing fields resolve to the CLI defaults,
-not the previous segment. To disable CFC after a CFC segment, set `"f_hi": null`.
+not the previous segment. To disable the high layer on a segment, set
+`"hi_mix": 0` — this silences the high carrier entirely regardless of `f_hi`
+or `hi_mode`. Setting `"f_hi": null` only disables the pulse/beat in the high
+layer, but the carrier tone still plays.
 
 ### Crossfade
 
