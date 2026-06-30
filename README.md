@@ -1,21 +1,32 @@
 # Binaural Beats Mixer
 
-Generate binaural beats and cross-frequency coupled (CFC) audio — stereo tones for brainwave entrainment. Requires only `numpy`.
+Generate binaural beats and cross-frequency coupled (CFC) audio — stereo WAV
+files for brainwave entrainment. Supports single segments via CLI flags,
+multi-segment sessions with parameter crossfades, isochronic pulsing,
+visualization, and session files with per-segment overrides. Only dependency:
+`numpy`.
+
+## Requirements
+
+- Python 3.14+
+- `numpy` (only dependency)
 
 ## Quick start
 
 ```powershell
-.venv\Scripts\Activate.ps1
 pip install numpy
 python binaural_beats.py -p alpha -d 600 -o alpha_10min.wav
 ```
 
 ## Warnings
 
-- **Delta and theta** cause drowsiness. Never listen while driving, operating machinery, or doing tasks requiring alertness.
-- **Alpha** — do not drive or operate machinery while listening.
-- **High beta** (20+ Hz) can increase anxiety in sensitive individuals — start with short sessions, keep volume low.
-- **Always use headphones** — binaural beats require isolation between ears. Speakers collapse the stereo field and the effect is lost.
+- **Delta and theta waves** cause drowsiness. Never listen while driving,
+  operating machinery, or doing tasks requiring alertness.
+- **Alpha waves** — do not drive or operate machinery while listening.
+- **High beta** (20+ Hz) can increase anxiety in sensitive individuals —
+  start with short sessions, keep volume low.
+- **Always use headphones** — binaural beats require isolation between ears.
+  Speakers collapse the stereo field and the effect is lost.
 - **Barely audible is fine**. Louder does not mean stronger entrainment.
 - If you have epilepsy, consult a doctor before using rhythmic audio stimulation.
 
@@ -28,6 +39,7 @@ python binaural_beats.py [-h] [-p PRESET] [-c CARRIER] [-b BEAT] [-d DURATION]
                          [--mod-depth MOD_DEPTH] [--hi-carrier HI_CARRIER]
                          [--hi-mix HI_MIX] [--iso-depth ISO_DEPTH]
                          [--session-file SESSION_FILE] [--crossfade CROSSFADE]
+                         [--visualize]
 ```
 
 ### Options
@@ -49,6 +61,7 @@ python binaural_beats.py [-h] [-p PRESET] [-c CARRIER] [-b BEAT] [-d DURATION]
 | `--iso-depth` | 1.0 | Isochronic pulse depth 0–1 — 1 = fully mutes between pulses, 0 = no pulse |
 | `--session-file` | — | JSON session file with segment definitions |
 | `--crossfade` | 30 s | Sweep duration between segments in session mode |
+| `--visualize` | — | Generate waveform visualization (requires `matplotlib`) |
 
 ### Examples
 
@@ -70,6 +83,9 @@ python binaural_beats.py -p theta-gamma -d 600 -o monk_track.wav
 
 # Multi-segment session from a JSON file
 python binaural_beats.py --session-file sessions/meditation.json -o session.wav
+
+# Generate waveform visualization
+python binaural_beats.py -p alpha -d 300 --visualize
 ```
 
 ## Session mode
@@ -113,6 +129,19 @@ not the previous segment. To disable the high layer on a segment, set
 or `hi_mode`. Setting `"f_hi": null` only disables the pulse/beat in the high
 layer, but the carrier tone still plays.
 
+### Visualization
+
+Pass `--visualize` to generate a waveform plot per segment, saved alongside
+the WAV as `<name>_viz.png`. Each plot shows 3 beat cycles of the combined
+L+R signal with its envelope. CFC segments show low and high layers
+separately (blue/red) with a combined trace (black):
+
+For the example session above, this produces:
+
+![Session visualization](docs/session_viz.png)
+
+Requires `matplotlib` (optional dependency).
+
 ### Crossfade
 
 During the `--crossfade` period at the start of each segment, numeric
@@ -135,6 +164,74 @@ python binaural_beats.py --session-file sessions/meditation.json -o progressive.
 python binaural_beats.py --session-file session.json --crossfade 5 -o quick.wav
 ```
 
+## CFC mode
+
+Cross-Frequency Coupling (CFC) mimics how the brain coordinates oscillations
+across different frequency bands — most commonly **phase-amplitude coupling
+(PAC)**, where a slow rhythm's phase controls the amplitude of a faster rhythm.
+
+When `--f-hi` is set, two layers are generated and summed:
+
+1. **Low layer** — binaural beat at `beat` Hz on `carrier` Hz (L/R detuned).
+   Entrains the slow rhythm.
+2. **High layer** — tone at `hi_carrier` Hz, amplitude-modulated at `beat`
+   Hz via `envelope = 1 + mod_depth × cos(2π × beat × t)`. The fast tone's
+   volume pulses with the slow rhythm — this is the coupling.
+
+High layer stereo presentation controlled by `--hi-mode`:
+
+| Mode | What you get | Best for |
+|------|-------------|----------|
+| `binaural` | L/R detuned at `f_hi` Hz: `hi_carrier ± f_hi/2` | Second binaural beat at `f_hi` Hz (≤ 30 Hz) |
+| `iso` | `hi_carrier` Hz tone pulsed at `f_hi` Hz, nested inside `beat`-Hz envelope | Gamma (40 Hz+) — see [Oster curve](#the-oster-curve) |
+
+In `iso` mode, the high layer is a carrier tone at `hi_carrier` Hz that pulses
+`f_hi` times per second (isochronic tone). Pulse depth controlled by
+`--iso-depth`:
+
+```
+gamma_pulse = (1 - iso_depth) + iso_depth × 0.5 × (1 + sin(2π × f_hi × t))
+theta_env   = 1 + mod_depth × cos(2π × beat × t)
+high_layer  = hi_gain × theta_env × gamma_pulse × sin(2π × hi_carrier × t)
+```
+
+At `--iso-depth 1.0` (default), `gamma_pulse` ranges 0–1, fully muting the
+carrier between pulses for a classic isochronic feel. At `--iso-depth 0.7`,
+it ranges 0.3–1 — gentler pulse, no silence gap. At `--iso-depth 0`, the
+pulse is disabled and the carrier plays constantly.
+
+Both layers are normalized so `--volume` means the same peak level regardless
+of CFC settings.
+
+### CFC cautions
+
+- **Start with low mod_depth** (0.2–0.4). High depth can sound warbling or unsettling.
+- **`--hi-mode iso` is recommended for gamma** (40 Hz+) — the binaural beat
+  at 400 Hz + 40 Hz is hard for the brain to detect.
+- **Keep carriers separated** — `--carrier` (200) and `--hi-carrier` (400)
+  are an octave apart, which prevents frequency masking.
+- **Low beat + high mod_depth** (e.g., delta at 2 Hz with depth 0.8+) can
+  pulse slowly enough to be distracting rather than relaxing.
+
+### Harmonic relationship between beat and f_hi
+
+In CFC mode, the high layer pulses at `f_hi` Hz inside a `beat`-Hz envelope.
+When `beat` and `f_hi` are not integer multiples of each other, the pulse
+lands at different phases of each successive beat cycle. For example, with
+`beat=6`, `f_hi=40` (GCD=2), the full pattern repeats every 0.5 seconds
+(3 beat cycles), and the high-layer amplitude varies from one cycle to the
+next:
+
+```
+gamma pulse phase at consecutive beat peaks: sin(40π/3), sin(80π/3), sin(40π)
+                                      ≈      0.87,         0,       -0.87
+```
+
+This creates a richer, evolving texture within each repeat — not a steady
+pulse. It is an intentional audible feature, not a bug. If you prefer the
+high layer to peak identically in every beat cycle, choose `f_hi` as a
+multiple of `beat` (e.g., `beat=6`, `f_hi=36` instead of 40).
+
 ## Presets
 
 ### Simple presets
@@ -156,77 +253,24 @@ python binaural_beats.py --session-file session.json --crossfade 5 -o quick.wav
 | `alpha-gamma` | 10 + 40 Hz | Flow state — alpha's relaxed spaciousness with gamma's cognitive binding. The 10 Hz rhythm is naturally pleasant, like a gentle shimmer. | Generally safe and comfortable. Best for creative work or light meditation. |
 | `theta-beta` | 6 + 18 Hz | Attention regulation — theta's dreamy awareness coupled with beta's active focus. Balances inward reflection with outward alertness. | Not for sleep. Works well for reading, studying, or tasks that need sustained attention without hyper-focus. |
 
-## CFC mode
+## The Oster curve
 
-Cross-Frequency Coupling (CFC) mimics how the brain coordinates oscillations
-across different frequency bands — most commonly **phase-amplitude coupling
-(PAC)**, where a slow rhythm's phase controls the amplitude of a faster rhythm.
+[Gerald Oster's 1973 research](https://www.binauralbeatsmeditation.com/oster-curve/)
+mapped how clearly binaural beats are perceived across different carrier
+frequencies. The curve peaks around **440–460 Hz** (strongest perception)
+and falls off below ~100 Hz and above ~800 Hz. At 400 Hz the curve peaks
+around **~26 Hz (high beta)** — for `f_hi` at gamma (40 Hz+), binaural beats
+are past the peak and harder to perceive. Use `--hi-mode iso` so gamma
+pulsing is physically present in the waveform, not reliant on the stereo
+illusion.
 
-When `--f-hi` is set, two layers are generated and summed:
+Our defaults sit deliberately on the curve:
+- **200 Hz** low carrier — near the theta/alpha sweet spot
+- **400 Hz** high carrier — near the high beta peak
 
-1. **Low layer** — binaural beat at `beat` Hz on `carrier` Hz (L/R detuned).
-   Entrains the slow rhythm.
-2. **High layer** — tone at `hi_carrier` Hz, amplitude-modulated at `beat`
-   Hz via `envelope = 1 + mod_depth × sin(2π × beat × t)`. The fast tone's
-   volume pulses with the slow rhythm — this is the coupling.
+![Oster curve](docs/oster-curve.png)
 
-High layer stereo presentation controlled by `--hi-mode`:
-
-| Mode | What you get | Best for |
-|------|-------------|----------|
-| `binaural` | L/R detuned at `f_hi` Hz: `hi_carrier ± f_hi/2` | Second binaural beat at `f_hi` Hz (≤ 30 Hz) |
-| `iso` | `hi_carrier` Hz tone pulsed at `f_hi` Hz, nested inside `beat`-Hz envelope | Gamma (40 Hz+) where Oster curve drops off |
-
-In `iso` mode, the high layer is a carrier tone at `hi_carrier` Hz that pulses
-`f_hi` times per second (isochronic tone). Pulse depth controlled by
-`--iso-depth`:
-
-```
-gamma_pulse = (1 - iso_depth) + iso_depth × 0.5 × (1 + sin(2π × f_hi × t))
-theta_env   = 1 + mod_depth × sin(2π × beat × t)
-high_layer  = hi_gain × theta_env × gamma_pulse × sin(2π × hi_carrier × t)
-```
-
-At `--iso-depth 1.0` (default), `gamma_pulse` ranges 0–1, fully muting the
-carrier between pulses for a classic isochronic feel. At `--iso-depth 0.7`,
-it ranges 0.3–1 — gentler pulse, no silence gap. At `--iso-depth 0`, the
-pulse is disabled and the carrier plays constantly.
-
-The Oster curve at 400 Hz peaks around **~26 Hz (high beta)**. For `f_hi` at
-gamma (40 Hz+), the binaural beat is past the curve's peak and harder to
-perceive — use **`--hi-mode iso`** so the gamma pulsing is physically present
-in the waveform, not reliant on the stereo illusion. For `f_hi` ≤ 30 Hz (beta
-or lower), `binaural` mode works well.
-
-Both layers are normalized so `--volume` means the same peak level regardless
-of CFC settings.
-
-### CFC cautions
-
-- **Start with low mod_depth** (0.2–0.4). High depth can sound warbling or unsettling.
-- **`--hi-mode iso` is recommended for gamma** (40 Hz+) — the binaural beat
-  at 400 Hz + 40 Hz is hard for the brain to detect.
-- **Keep carriers separated** — `--carrier` (200) and `--hi-carrier` (400)
-  are an octave apart, which prevents frequency masking.
-- **Low beat + high mod_depth** (e.g., delta at 2 Hz with depth 0.8+) can
-  pulse slowly enough to be distracting rather than relaxing.
-
-## How simple binaural works
-
-Each ear receives a pure sine wave at slightly different frequencies:
-
-- Left channel: `carrier - beat/2`
-- Right channel: `carrier + beat/2`
-
-The brain perceives the difference (`beat` Hz) as a rhythmic pulse — the
-binaural beat. This works because the brain's superior olivary nucleus detects
-the phase difference between the two ears. Use stereo headphones — speakers
-mix the signals in the air and the effect is lost.
-
-A raised-cosine (Hann) fade in/out prevents clicks at start and end.
-
-All generated files go in `output/` (gitignored). Pass just a filename to `-o`,
-the directory is automatic.
+Regenerate the plot with `python plot_oster.py` (requires `matplotlib`).
 
 ## Sub-bands reference
 
@@ -245,23 +289,3 @@ the directory is automatic.
 | **Gamma** | Low Gamma | 30.0–45.0 Hz | Sensory binding — unified visual, auditory, tactile perception | Intense at high volume |
 | | High Gamma | 45.0–100.0 Hz | Peak learning spikes, complex problem-solving, linguistic tasks | Intense at high volume |
 | **Lambda** | — | ~200 Hz | Visual processing, saccade-related (not entrained) | Informational only |
-
-## The Oster curve
-
-[Gerald Oster's 1973 research](https://www.binauralbeatsmeditation.com/oster-curve/)
-mapped how clearly binaural beats are perceived across different carrier
-frequencies. The curve peaks around **440–460 Hz** (strongest perception)
-and falls off below ~100 Hz and above ~800 Hz.
-
-Our defaults sit deliberately on the curve:
-- **200 Hz** low carrier — near the theta/alpha sweet spot
-- **400 Hz** high carrier — near the high beta peak
-
-![Oster curve](docs/oster-curve.png)
-
-Regenerate the plot with `python plot_oster.py` (requires `matplotlib`).
-
-## Requirements
-
-- Python 3.14+
-- `numpy` (only dependency)

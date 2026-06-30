@@ -70,7 +70,7 @@ def generate(carrier, beat, duration, sr, amplitude, fade,
         right = amplitude * np.sin(phi_c + phi_b)
 
         if is_cfc:
-            envelope = 1.0 + mod_depth * np.sin(2 * np.pi * beat * (start + np.arange(local_n)) / sr)
+            envelope = 1.0 + mod_depth * np.cos(2 * np.pi * beat * (start + np.arange(local_n)) / sr)
 
             lo_left = lo_gain * np.sin(phi_c - phi_b)
             lo_right = lo_gain * np.sin(phi_c + phi_b)
@@ -215,7 +215,7 @@ def generate_session(segments, crossfade, sr, amplitude, fade):
         lo_left = lo_gain * np.sin(phi_c - phi_b)
         lo_right = lo_gain * np.sin(phi_c + phi_b)
 
-        envelope = 1.0 + mod_depth_arr * np.sin(2 * np.pi * beat_arr * t)
+        envelope = 1.0 + mod_depth_arr * np.cos(2 * np.pi * beat_arr * t)
 
         mask_bi = hi_mode_arr == "binaural"
         mask_iso = ~mask_bi
@@ -325,6 +325,10 @@ def parse_args():
         "--crossfade", type=float, default=30,
         help="Transition sweep duration between segments in seconds (default: 30)"
     )
+    parser.add_argument(
+        "--visualize", action="store_true",
+        help="Generate waveform visualization PNG"
+    )
     args = parser.parse_args()
 
     if args.volume < 0 or args.volume > 1:
@@ -363,9 +367,142 @@ def load_session(path, args):
             raise ValueError(f"Segment {i} duration must be positive")
         seg = dict(defaults)
         seg.update(entry)
+        if seg.get("f_hi") is None and "hi_mix" not in entry:
+            seg["hi_mix"] = 0
         segments.append(seg)
 
     return segments
+
+
+def _envelope(signal, carrier_freq, sr):
+    carrier_period = max(int(sr / max(carrier_freq, 1)), 1)
+    kernel = np.ones(carrier_period) / carrier_period
+    return np.convolve(np.abs(signal), kernel, mode="same") * (np.pi / 2)
+
+
+def _viz_layers(seg, sr, sample_offset, n_samples):
+    t = np.arange(sample_offset, sample_offset + n_samples) / sr
+    amplitude = seg["volume"]
+    hi_mix = seg.get("hi_mix", 0)
+    mod_depth = seg.get("mod_depth", 0.5)
+
+    has_high = hi_mix > 0
+    if has_high:
+        norm = 1.0 / ((1.0 - hi_mix) + hi_mix * (1.0 + mod_depth))
+        lo_gain = amplitude * (1.0 - hi_mix) * norm
+        hi_gain = amplitude * hi_mix * norm
+    else:
+        lo_gain = amplitude
+        hi_gain = 0
+
+    lo_beat_half = seg["beat"] / 2
+    lo_left = lo_gain * np.sin(2 * np.pi * (seg["carrier"] - lo_beat_half) * t)
+    lo_right = lo_gain * np.sin(2 * np.pi * (seg["carrier"] + lo_beat_half) * t)
+    low_sum = lo_left + lo_right
+
+    high_sum = np.zeros(n_samples)
+    if has_high:
+        envelope = 1.0 + mod_depth * np.cos(2 * np.pi * seg["beat"] * t)
+        hi_carrier = seg.get("hi_carrier", 400)
+        f_hi = seg.get("f_hi") or 0
+
+        if seg.get("hi_mode", "binaural") == "iso":
+            iso_depth = seg.get("iso_depth", 1.0)
+            phi_p = 2 * np.pi * f_hi * t
+            gamma_pulse = (1.0 - iso_depth) + iso_depth * 0.5 * (1.0 + np.sin(phi_p))
+            hi_left = hi_gain * envelope * gamma_pulse * np.sin(2 * np.pi * hi_carrier * t)
+            hi_right = hi_gain * envelope * gamma_pulse * np.sin(2 * np.pi * hi_carrier * t)
+        else:
+            hi_beat_half = f_hi / 2
+            hi_left = hi_gain * envelope * np.sin(2 * np.pi * (hi_carrier - hi_beat_half) * t)
+            hi_right = hi_gain * envelope * np.sin(2 * np.pi * (hi_carrier + hi_beat_half) * t)
+        high_sum = hi_left + hi_right
+
+    return low_sum, high_sum
+
+
+def plot_visualize(wav_path, sr, segments, crossfade):
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print("matplotlib not found — skipping visualization (pip install matplotlib)")
+        return
+
+    with wave.open(str(wav_path)) as f:
+        raw = np.frombuffer(f.readframes(-1), dtype=np.int16).reshape(-1, 2)
+    data = raw.astype(float) / 32767
+
+    seg_n = [int(sr * s["duration"]) for s in segments]
+    seg_limits = np.cumsum([0] + seg_n)
+    n = seg_limits[-1]
+
+    fig, axes = plt.subplots(len(segments), 1, figsize=(12, 2 * len(segments)))
+    if len(segments) == 1:
+        axes = [axes]
+
+    for i, seg in enumerate(segments):
+        ax = axes[i]
+        dur = seg["duration"]
+        usable_start = min(crossfade, dur / 2) if i > 0 else 0
+        seg_offset = seg_limits[i] / sr
+        center = seg_offset + usable_start + (dur - usable_start) / 2
+
+        half_window = 3 / (2 * max(seg["beat"], 0.1))
+        lo = int(sr * max(0, center - half_window))
+        hi = int(sr * min(n, center + half_window))
+        t = np.arange(lo, hi) / sr
+
+        has_high = seg.get("hi_mix", 0) > 0
+
+        if has_high:
+            seg_start_sample = int(seg_offset * sr)
+            low_sum, high_sum = _viz_layers(seg, sr,
+                                            lo - seg_start_sample,
+                                            hi - lo)
+            combined = low_sum + high_sum
+
+            max_carrier = max(seg["carrier"], seg.get("hi_carrier", 0))
+            env_comb = _envelope(combined, max_carrier, sr)
+            ax.fill_between(t, -env_comb, env_comb, alpha=0.12, color="gray")
+            ax.plot(t, combined, color="black", linewidth=0.5, alpha=0.4, label="L+R")
+            ax.plot(t, env_comb, "k--", linewidth=0.8, label="envelope")
+            ax.plot(t, -env_comb, "k--", linewidth=0.8)
+
+            env_low = _envelope(low_sum, seg["carrier"], sr)
+            ax.plot(t, low_sum, color="blue", linewidth=0.2, alpha=0.4, label="low")
+            ax.plot(t, env_low, color="blue", linewidth=0.4, alpha=0.4, linestyle="--")
+            ax.plot(t, -env_low, color="blue", linewidth=0.4, alpha=0.4, linestyle="--")
+
+            env_high = _envelope(high_sum, seg.get("hi_carrier", seg["carrier"]), sr)
+            ax.plot(t, high_sum, color="red", linewidth=0.2, alpha=0.4, label="high")
+            ax.plot(t, env_high, color="red", linewidth=0.4, alpha=0.4, linestyle="--")
+            ax.plot(t, -env_high, color="red", linewidth=0.4, alpha=0.4, linestyle="--")
+        else:
+            signal = data[lo:hi, 0] + data[lo:hi, 1]
+            env = _envelope(signal, seg["carrier"], sr)
+            ax.fill_between(t, -env, env, alpha=0.12, color="gray")
+            ax.plot(t, signal, color="black", linewidth=0.3, alpha=0.4, label="L+R")
+            ax.plot(t, env, "k--", linewidth=0.8, label="envelope")
+            ax.plot(t, -env, "k--", linewidth=0.8)
+
+        title = seg.get("desc", f"seg {i}")
+        parts = [f"beat={seg['beat']}Hz", f"carrier={seg['carrier']}Hz"]
+        f_hi = seg.get("f_hi")
+        if f_hi:
+            hi_mode = seg.get("hi_mode", "binaural")
+            parts.append(f"{hi_mode} {f_hi}Hz")
+        title += " | " + ", ".join(parts)
+        ax.set_title(title, fontsize=10)
+        ax.set_ylabel("Amplitude")
+        ax.legend(loc="upper right", fontsize=8)
+        ax.grid(True, alpha=0.3)
+
+    axes[-1].set_xlabel("Time (s)")
+    fig.tight_layout()
+    viz_path = wav_path.parent / f"{wav_path.stem}_viz.png"
+    fig.savefig(viz_path, dpi=150)
+    plt.close(fig)
+    print(f"Wrote {viz_path}")
 
 
 def main():
@@ -373,6 +510,8 @@ def main():
 
     out = Path("output", args.output)
     out.parent.mkdir(parents=True, exist_ok=True)
+
+    viz_segments = None
 
     if args.session_file:
         segments = load_session(args.session_file, args)
@@ -385,31 +524,48 @@ def main():
         )
         write_wav(str(out), chunks, SAMPLE_RATE)
         print(f"Wrote {out}")
-        return
-
-    if args.preset:
-        p = PRESETS[args.preset]
-        beat = p["beat"]
-        f_hi = p.get("f_hi", args.f_hi)
+        viz_segments = segments
     else:
-        beat = args.beat
-        f_hi = args.f_hi
-
-    label = f"binaural beat @ {beat} Hz"
-    if f_hi:
-        if args.hi_mode == "iso":
-            label += f" + iso CFC @ {f_hi} Hz (iso-depth {args.iso_depth}, mod-depth {args.mod_depth})"
+        if args.preset:
+            p = PRESETS[args.preset]
+            beat = p["beat"]
+            f_hi = p.get("f_hi", args.f_hi)
         else:
-            label += f" + binaural CFC @ {f_hi} Hz (depth {args.mod_depth})"
+            beat = args.beat
+            f_hi = args.f_hi
 
-    print(f"Generating {args.duration}s {label}...")
-    chunks = generate(
-        args.carrier, beat, args.duration, SAMPLE_RATE, args.volume, args.fade,
-        f_hi, args.hi_mode, args.mod_depth, args.hi_carrier, args.hi_mix,
-        args.iso_depth
-    )
-    write_wav(str(out), chunks, SAMPLE_RATE)
-    print(f"Wrote {out}")
+        label = f"binaural beat @ {beat} Hz"
+        if f_hi:
+            if args.hi_mode == "iso":
+                label += f" + iso CFC @ {f_hi} Hz (iso-depth {args.iso_depth}, mod-depth {args.mod_depth})"
+            else:
+                label += f" + binaural CFC @ {f_hi} Hz (depth {args.mod_depth})"
+
+        print(f"Generating {args.duration}s {label}...")
+        chunks = generate(
+            args.carrier, beat, args.duration, SAMPLE_RATE, args.volume, args.fade,
+            f_hi, args.hi_mode, args.mod_depth, args.hi_carrier, args.hi_mix,
+            args.iso_depth
+        )
+        write_wav(str(out), chunks, SAMPLE_RATE)
+        print(f"Wrote {out}")
+
+        viz_segments = [{
+            "beat": beat,
+            "carrier": args.carrier,
+            "f_hi": f_hi,
+            "hi_mode": args.hi_mode,
+            "mod_depth": args.mod_depth,
+            "hi_carrier": args.hi_carrier,
+            "hi_mix": args.hi_mix,
+            "volume": args.volume,
+            "iso_depth": args.iso_depth,
+            "duration": args.duration,
+            "desc": label,
+        }]
+
+    if args.visualize and viz_segments:
+        plot_visualize(out, SAMPLE_RATE, viz_segments, args.crossfade)
 
 
 if __name__ == "__main__":
