@@ -60,7 +60,7 @@ def generate(carrier, beat, duration, sr, amplitude, fade,
         local_n = end - start
 
         f_carrier = np.full(local_n, carrier)
-        f_beat = np.full(local_n, beat)
+        f_beat = np.full(local_n, beat / 2)
 
         phi_c, phi_c_end = _accumulate_phase(phi_carrier, f_carrier, sr)
         phi_b, phi_b_end = _accumulate_phase(phi_beat, f_beat, sr)
@@ -188,7 +188,7 @@ def generate_session(segments, crossfade, sr, amplitude, fade):
         hi_mode_arr = seg_val_cat("hi_mode", seg_idx)
 
         phi_c, phi_c_end = _accumulate_phase(phi_carrier, carrier_arr, sr)
-        phi_b, phi_b_end = _accumulate_phase(phi_beat, beat_arr, sr)
+        phi_b, phi_b_end = _accumulate_phase(phi_beat, beat_arr / 2, sr)
         phi_carrier, phi_beat = phi_c_end, phi_b_end
 
         # Always compute CFC formula — non-CFC segments default params to 0,
